@@ -87,6 +87,16 @@ summary{color:var(--blue);font-weight:600;padding:8px 0;min-height:40px;cursor:p
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:15px;z-index:30;max-width:90%;text-align:center}
 .done-mark{width:52px;height:52px;border-radius:50%;background:#E3F2EA;color:var(--green);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
+
+.fx-scene{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}
+.fx-scene .moon{position:absolute;top:9%;left:50%;font-size:52px;opacity:0;transform:translateX(-50%) scale(.5);animation:fx-moon .5s ease-out .35s forwards}
+.fx-scene .rocket{position:absolute;left:50%;bottom:-64px;font-size:46px;transform:translate(-50%,0) rotate(0deg);animation:fx-launch 2.4s cubic-bezier(.35,0,.55,1) forwards}
+@keyframes fx-moon{from{opacity:0;transform:translateX(-50%) scale(.5)}to{opacity:1;transform:translateX(-50%) scale(1)}}
+@keyframes fx-launch{0%{bottom:-64px;transform:translate(-50%,0) rotate(0deg)}12%{transform:translate(-50%,0) rotate(-5deg)}30%{transform:translate(-50%,0) rotate(4deg)}55%{transform:translate(-50%,0) rotate(-2deg)}100%{bottom:118%;transform:translate(-50%,0) rotate(0deg)}}
+.fx-coin{position:absolute;font-size:18px;opacity:1;animation:fx-coin .8s ease-in forwards}
+@keyframes fx-coin{0%{transform:translateY(0) translateX(0) rotate(0deg);opacity:1}100%{transform:translateY(120px) translateX(var(--dx,0px)) rotate(var(--rot,180deg));opacity:0}}
+.fx-toast{position:fixed;left:50%;top:14%;transform:translateX(-50%) translateY(-6px);background:var(--ink);color:#fff;padding:9px 16px;border-radius:999px;font-size:14.5px;font-weight:650;opacity:0;animation:fx-tag .4s ease-out .2s forwards}
+@keyframes fx-tag{from{opacity:0;transform:translateX(-50%) translateY(-6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 </style>
 </head>
 <body>
@@ -498,7 +508,7 @@ let memCopy = null;
 
 const defaults = () => ({
   v: 1,
-  settings: { name: '', addr: '', email: '', holder: '', bank: '', sort: '', acct: '', signature: '', terms: 30, method: 'Transfer', nextNo: 11, pad: 3, lastBackup: 0 },
+  settings: { name: '', addr: '', email: '', holder: '', bank: '', sort: '', acct: '', signature: '', terms: 30, method: 'Transfer', nextNo: 11, pad: 3, lastBackup: 0, defaultLoc: 'Gloucester' },
   clients: [{ id: 'c1', name: 'SpaMedica', addr: 'SpaMedica House, 43 Churchgate, Bolton\nBL1 1HU\nUnited Kingdom', reg: 'Co. Reg. No.: 06644293' }],
   items: [
     { id: 'i1', name: 'Freedom Vision Consultation', price: 100 },
@@ -526,7 +536,7 @@ function normalise(s) {
   s.clients = s.clients || d.clients;
   s.items = s.items || d.items;
   s.entries = s.entries || [];
-  s.invoices = s.invoices || [];
+  s.invoices = (s.invoices || []).map(inv => Object.assign({ paid: false, paidAt: null }, inv));
   return s;
 }
 function save() {
@@ -569,6 +579,28 @@ function askConfirm(title, text, okLabel, fn) {
   ui.confirmFn = fn;
   openSheet('<h2>' + esc(title) + '</h2><p>' + esc(text) + '</p><div class="actions"><button class="btn danger" data-a="confirm-yes">' + esc(okLabel) + '</button><button class="btn quiet" data-a="close-sheet">Cancel</button></div>');
 }
+function launchRocket() {
+  const root = document.createElement('div');
+  root.className = 'fx-scene'; root.setAttribute('aria-hidden', 'true');
+  root.innerHTML = '<div class="fx-toast">Invoice paid</div><div class="moon">🌙</div><div class="rocket">🚀</div>';
+  document.body.appendChild(root);
+  const rocket = root.querySelector('.rocket');
+  const dur = 2400, start = performance.now();
+  const spawn = () => {
+    const r = rocket.getBoundingClientRect();
+    if (r.top > window.innerHeight || r.bottom < 0) return;
+    const el = document.createElement('div');
+    el.className = 'fx-coin'; el.textContent = Math.random() < 0.5 ? '£' : '💷';
+    el.style.left = (r.left + r.width / 2 - 9 + (Math.random() * 34 - 17)) + 'px';
+    el.style.top = (r.bottom - 8) + 'px';
+    el.style.setProperty('--dx', (Math.random() * 54 - 27) + 'px');
+    el.style.setProperty('--rot', (Math.random() * 260 - 130) + 'deg');
+    root.appendChild(el);
+    setTimeout(() => el.remove(), 850);
+  };
+  const iv = setInterval(() => { if (performance.now() - start > dur) return clearInterval(iv); spawn(); }, 90);
+  setTimeout(() => { clearInterval(iv); root.remove(); }, dur + 700);
+}
 const notice = (text, action, label) => '<div class="notice">' + esc(text) + '<button data-a="' + action + '">' + esc(label) + '</button></div>';
 const hd = (title, sub) => '<div class="hd"><h1>' + esc(title) + '</h1>' + (sub ? '<p class="sub">' + esc(sub) + '</p>' : '') + '</div>';
 
@@ -610,7 +642,6 @@ function entryMeta(e) {
   if (e.qty > 1) p.push('x' + e.qty);
   if (e.refs) p.push(parseRefs(e.refs).join(', '));
   if (e.loc) p.push(e.loc);
-  if (e.remark) p.push('(' + e.remark + ')');
   if (state.clients.length > 1) { const c = clientById(e.clientId); if (c) p.push(c.name); }
   return p.join('  ');
 }
@@ -660,9 +691,10 @@ function entrySheet(id) {
   h += '<label class="f">Item<select id="e-item">' + items.map(i => '<option value="' + i.id + '"' + (i.id === lastItem ? ' selected' : '') + '>' + esc(i.name) + '  (£' + money(i.price) + ')</option>').join('') + '</select></label>';
   h += '<label class="f">Reference numbers<input id="e-refs" autocomplete="off" placeholder="e.g. 955473, 963354" value="' + esc(e ? e.refs : '') + '"><small>Optional. Separate several with commas and the quantity follows.</small></label>';
   h += '<label class="f">Quantity<input id="e-qty" type="number" inputmode="numeric" min="1" step="1" value="' + (e ? e.qty : 1) + '"></label>';
-  h += '<details' + (e && (e.loc || e.remark) ? ' open' : '') + '><summary>Location or remark</summary>' +
-    '<label class="f">Location<input id="e-loc" autocomplete="off" placeholder="e.g. Gloucester" value="' + esc(e ? e.loc : '') + '"></label>' +
-    '<label class="f">Remark<input id="e-remark" autocomplete="off" placeholder="e.g. missed from invoice 009" value="' + esc(e ? e.remark : '') + '"></label></details>';
+  const loc = e ? e.loc : (ui.lastLoc != null ? ui.lastLoc : (state.settings.defaultLoc || ''));
+  h += '<label class="f">Location<input id="e-loc" autocomplete="off" value="' + esc(loc) + '"></label>';
+  h += '<details' + (e && e.remark ? ' open' : '') + '><summary>Remark</summary>' +
+    '<label class="f">Remark<input id="e-remark" autocomplete="off" value="' + esc(e ? e.remark : '') + '"></label></details>';
   h += '<div id="sheet-err" class="err" role="alert"></div>';
   h += '<div class="actions" data-eid="' + (e ? e.id : '') + '"><button class="btn" data-a="save-entry">Save</button>' +
     (e ? '<button class="btn danger" data-a="delete-entry" data-id="' + e.id + '">Delete entry</button>' : '<button class="btn ghost" data-a="save-entry-add">Save and add another</button>') +
@@ -683,7 +715,7 @@ function saveEntry(again) {
   const data = { date, clientId, itemId, qty, refs: $('#e-refs').value.trim(), loc: $('#e-loc').value.trim(), remark: $('#e-remark').value.trim() };
   if (eid) Object.assign(state.entries.find(x => x.id === eid), data);
   else state.entries.push(Object.assign({ id: uid(), invoiceId: null, created: Date.now() }, data));
-  ui.lastClient = clientId; ui.lastItem = itemId;
+  ui.lastClient = clientId; ui.lastItem = itemId; ui.lastLoc = data.loc;
   save();
   if (again) { ui.keepDate = date; closeSheet(); render(); entrySheet(null); toast('Saved'); return; }
   ui.keepDate = null; closeSheet(); render(); toast('Saved');
@@ -735,7 +767,7 @@ function viewInvoices() {
   h += '<div class="sec"><h2>Past invoices</h2>';
   if (!past.length) h += '<p class="sub">Invoices you create are kept here so you can send the PDF again.</p>';
   past.forEach(inv => {
-    h += '<button class="row" data-a="open-invoice" data-id="' + inv.id + '"><span><b>' + esc(inv.no) + '</b><br><span class="sm">' + esc(inv.client.name) + ', ' + dLong(inv.issue) + '</span></span><span class="amt">£' + money(inv.total) + '</span></button>';
+    h += '<button class="row" data-a="open-invoice" data-id="' + inv.id + '"><span><b>' + esc(inv.no) + '</b>' + (inv.paid ? '<span class="tag">Paid</span>' : '') + '<br><span class="sm">' + esc(inv.client.name) + ', ' + dLong(inv.issue) + '</span></span><span class="amt">£' + money(inv.total) + '</span></button>';
   });
   h += '</div>';
   return h;
@@ -815,7 +847,7 @@ function finalise() {
     client: { name: c.name, addr: c.addr, reg: c.reg },
     from: { name: s.name, addr: s.addr, email: s.email, holder: s.holder, bank: s.bank, sort: s.sort, acct: s.acct, signature: s.signature },
     lines, total: round2(lines.reduce((t, l) => t + lineAmt(l), 0)),
-    entryIds: d.entryIds.slice(), created: Date.now()
+    entryIds: d.entryIds.slice(), created: Date.now(), paid: false, paidAt: null
   };
   state.invoices.push(inv);
   state.entries.forEach(e => { if (inv.entryIds.indexOf(e.id) >= 0) e.invoiceId = inv.id; });
@@ -834,8 +866,13 @@ function viewDone() {
 
 function invoiceSheet(id) {
   const inv = invById(id);
-  openSheet('<h2>Invoice ' + esc(inv.no) + '</h2><p class="sub" style="margin:-8px 0 4px">' + esc(inv.client.name) + ', issued ' + dLong(inv.issue) + ', £' + money(inv.total) + '</p>' +
-    '<div class="actions"><button class="btn" data-a="share" data-id="' + inv.id + '">Share PDF</button><button class="btn ghost" data-a="save-pdf" data-id="' + inv.id + '">Save to phone</button>' +
+  const status = inv.paid ? ('Paid ' + dLong(toISO(new Date(inv.paidAt)))) : 'Not yet paid';
+  const payBtn = inv.paid
+    ? '<button class="btn quiet" data-a="mark-unpaid" data-id="' + inv.id + '">Mark as unpaid</button>'
+    : '<button class="btn" data-a="mark-paid" data-id="' + inv.id + '">Mark as paid</button>';
+  openSheet('<h2>Invoice ' + esc(inv.no) + '</h2><p class="sub" style="margin:-8px 0 2px">' + esc(inv.client.name) + ', issued ' + dLong(inv.issue) + ', £' + money(inv.total) + '</p>' +
+    '<p class="sub" style="margin:0 0 14px">' + esc(status) + '</p>' +
+    '<div class="actions">' + payBtn + '<button class="btn ghost" data-a="share" data-id="' + inv.id + '">Share PDF</button><button class="btn quiet" data-a="save-pdf" data-id="' + inv.id + '">Save to phone</button>' +
     '<button class="btn danger" data-a="delete-invoice" data-id="' + inv.id + '">Delete invoice</button><button class="btn quiet" data-a="close-sheet">Close</button></div>');
 }
 
@@ -874,7 +911,7 @@ function viewSettings() {
   h += '<div class="sec"><h2>Your details</h2>' + fld('Name as it appears on invoices', 'name') + fld('Address', 'addr', { textarea: true }) + fld('Email', 'email', { type: 'email' }) + '</div>';
   h += '<div class="sec"><h2>Payment details</h2>' + fld('Account holder', 'holder') + fld('Bank', 'bank') + fld('Sort code', 'sort', { mode: 'numeric' }) + fld('Account number', 'acct', { mode: 'numeric' }) + '</div>';
   h += '<div class="sec"><h2>Invoicing</h2>' + fld('Next invoice number', 'nextNo', { type: 'number', mode: 'numeric', hint: 'Your last invoice was 010, so this starts at 11.' }) +
-    fld('Days until payment is due', 'terms', { type: 'number', mode: 'numeric' }) + fld('Default payment method', 'method') + '</div>';
+    fld('Days until payment is due', 'terms', { type: 'number', mode: 'numeric' }) + fld('Default payment method', 'method') + fld('Default location for new entries', 'defaultLoc') + '</div>';
   h += '<div class="sec"><h2>Signature</h2><canvas id="sig" class="sigbox" width="900" height="300" aria-label="Signature pad"></canvas>' +
     '<div class="sigrow"><button class="btn quiet" data-a="sig-clear">Clear</button><button class="btn" data-a="sig-save">Save signature</button></div>' +
     '<p class="sub" style="margin-top:8px">' + (s.signature ? 'A signature is saved. Draw again and save to replace it.' : 'Draw with your finger, then save.') + '</p></div>';
@@ -1083,6 +1120,8 @@ document.addEventListener('click', ev => {
     case 'share': { const inv = invById(id); if (inv) shareFile(pdfFile(inv), 'Invoice ' + inv.no); break; }
     case 'save-pdf': { const inv = invById(id); if (inv) { downloadFile(pdfFile(inv)); toast('Saved to Downloads'); } break; }
     case 'open-invoice': invoiceSheet(id); break;
+    case 'mark-paid': { const inv = invById(id); inv.paid = true; inv.paidAt = Date.now(); save(); closeSheet(); render(); launchRocket(); break; }
+    case 'mark-unpaid': { const inv = invById(id); inv.paid = false; inv.paidAt = null; save(); closeSheet(); render(); break; }
     case 'delete-invoice': askConfirm('Delete this invoice?', 'Its entries go back to unbilled so you can invoice them again. The number is not reused automatically.', 'Delete invoice', () => {
       state.entries.forEach(e => { if (e.invoiceId === id) e.invoiceId = null; });
       state.invoices = state.invoices.filter(i => i.id !== id); save(); ui.sel = null; closeSheet(); render(); toast('Invoice deleted');
